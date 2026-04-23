@@ -18,7 +18,7 @@ param(
     # Full URL to the release zip on GitHub. Use the "Release asset" URL, e.g.
     # https://github.com/<owner>/<repo>/releases/download/v1.0.0/TASKalfa4012i_minimal.zip
     # Or the "raw" archive URL if you prefer.
-    [string]$ZipUrl = 'https://github.com/ryansuzuki/kyocera4012/releases/latest/download/TASKalfa4012i_minimal.zip',
+    [string]$ZipUrl = 'https://github.com/ryansuzuki/kyocera4012/releases/latest/download/TASKalfa4012i.zip',
 
     # Driver model name as it appears in OEMSETUP.INF.
     # Leave as-is for TASKalfa 4012i; change if you repackage for another model.
