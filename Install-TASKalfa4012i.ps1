@@ -87,15 +87,10 @@ if (-not (Get-PrinterDriver -Name $Model -ErrorAction SilentlyContinue)) {
     }
 
     # Step 2b: register the printer driver under its friendly name.
+    # After pnputil staging, the driver package is in the Windows driver store
+    # (FileRepository), so Add-PrinterDriver can find it by name alone.
     Write-Host "Registering printer driver '$Model'..."
-    try {
-        Add-PrinterDriver -Name $Model -InfPath $InfPath -ErrorAction Stop
-    } catch {
-        # Fallback: after pnputil staging, the driver is in the Windows driver
-        # store (FileRepository) and Add-PrinterDriver can find it by name alone.
-        Write-Host "  InfPath form failed ($($_.Exception.Message)); retrying by name..."
-        Add-PrinterDriver -Name $Model -ErrorAction Stop
-    }
+    Add-PrinterDriver -Name $Model -ErrorAction Stop
 
     if (-not (Get-PrinterDriver -Name $Model -ErrorAction SilentlyContinue)) {
         throw "Driver install failed. Check that '$Model' exactly matches an entry in OEMSETUP.INF."
@@ -105,16 +100,19 @@ if (-not (Get-PrinterDriver -Name $Model -ErrorAction SilentlyContinue)) {
 }
 
 # --- 3. Create TCP/IP port ----------------------------------------------
+# Add-PrinterPort infers the port type from which parameters you pass:
+#   PrinterHostAddress + PortNumber  => RAW (what we want for 9100)
+#   LprHostAddress + LprQueueName    => LPR
+# There is no "-Protocol" parameter in Win10/11 PrintManagement.
 if (-not (Get-PrinterPort -Name $PortName -ErrorAction SilentlyContinue)) {
-    Write-Host "Creating TCP/IP port $PortName ($IpAddress)"
+    Write-Host "Creating RAW TCP/IP port $PortName ($IpAddress:9100)"
     $portParams = @{
         Name               = $PortName
         PrinterHostAddress = $IpAddress
         PortNumber         = 9100
-        Protocol           = 1   # 1 = RAW, 2 = LPR
     }
     if ($DisableSnmp) { $portParams.SNMPEnabled = $false }
-    Add-PrinterPort @portParams
+    Add-PrinterPort @portParams -ErrorAction Stop
 } else {
     Write-Host "Port $PortName already exists."
 }
@@ -122,7 +120,7 @@ if (-not (Get-PrinterPort -Name $PortName -ErrorAction SilentlyContinue)) {
 # --- 4. Create the printer ----------------------------------------------
 if (-not (Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue)) {
     Write-Host "Creating printer '$PrinterName'"
-    Add-Printer -Name $PrinterName -DriverName $Model -PortName $PortName
+    Add-Printer -Name $PrinterName -DriverName $Model -PortName $PortName -ErrorAction Stop
 } else {
     Write-Host "Printer '$PrinterName' already exists."
 }
