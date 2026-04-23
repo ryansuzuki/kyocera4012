@@ -76,10 +76,26 @@ Write-Host "Using INF: $InfPath"
 
 # --- 2. Install the driver ----------------------------------------------
 if (-not (Get-PrinterDriver -Name $Model -ErrorAction SilentlyContinue)) {
-    Write-Host "Installing driver '$Model'"
-    $arch = if ([Environment]::Is64BitOperatingSystem) { 'x64' } else { 'x86' }
-    $rundllArgs = 'printui.dll,PrintUIEntry /ia /m "{0}" /h {1} /v "Type 3 - User Mode" /f "{2}"' -f $Model, $arch, $InfPath
-    Start-Process rundll32.exe -ArgumentList $rundllArgs -Wait -NoNewWindow
+    # Step 2a: stage the INF into the Windows driver store with pnputil.
+    # This is much more reliable than `rundll32 printui.dll,PrintUIEntry /ia`
+    # on Windows 10/11 and gives us real error messages on failure.
+    Write-Host "Staging driver into Windows driver store (pnputil)..."
+    $pnputilOutput = & pnputil.exe /add-driver $InfPath 2>&1
+    $pnputilOutput | ForEach-Object { Write-Host "  $_" }
+    if ($LASTEXITCODE -ne 0) {
+        throw "pnputil failed with exit code $LASTEXITCODE. Driver not staged."
+    }
+
+    # Step 2b: register the printer driver under its friendly name.
+    Write-Host "Registering printer driver '$Model'..."
+    try {
+        Add-PrinterDriver -Name $Model -InfPath $InfPath -ErrorAction Stop
+    } catch {
+        # Fallback: after pnputil staging, the driver is in the Windows driver
+        # store (FileRepository) and Add-PrinterDriver can find it by name alone.
+        Write-Host "  InfPath form failed ($($_.Exception.Message)); retrying by name..."
+        Add-PrinterDriver -Name $Model -ErrorAction Stop
+    }
 
     if (-not (Get-PrinterDriver -Name $Model -ErrorAction SilentlyContinue)) {
         throw "Driver install failed. Check that '$Model' exactly matches an entry in OEMSETUP.INF."
